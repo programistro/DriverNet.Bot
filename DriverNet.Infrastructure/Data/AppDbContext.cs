@@ -9,6 +9,8 @@ public class AppDbContext : DbContext
     
     public DbSet<Dispatcher> Dispatchers { get; set; }
     
+    public DbSet<Cargo> Cargos { get; set; }
+    
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
     
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

@@ -5,25 +5,26 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace DriverNet.Application.Service;
 
 public class TelegramBotService : ITelegramBotService, IDisposable
 {
     private readonly TelegramBotClient _botClient;
-    private readonly IDriverRepository _userRepository;
-    private readonly IDispatcherRepository _messageService;
+    private readonly IDriverRepository _driverRepository;
+    private readonly IDispatcherRepository _dispatcherRepository;
     private CancellationTokenSource _cts;
     private static Dictionary<long, SurveyState> _surveyStates = new();
 
     public TelegramBotService(
         string botToken,
-        IDriverRepository userRepository,
-        IDispatcherRepository messageService)
+        IDriverRepository driverRepository,
+        IDispatcherRepository dispatcherRepository)
     {
         _botClient = new TelegramBotClient(botToken);
-        _userRepository = userRepository;
-        _messageService = messageService;
+        _driverRepository = driverRepository;
+        _dispatcherRepository = dispatcherRepository;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -97,12 +98,19 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         await HandlePathTrabelAsync(botClient, message, currentStep, cancellationToken);
                         break;
                     case SurveyStep.None:
-                        Dispatcher dispatcher = new()
+                        Cargo cargo = new()
                         {
                             Id = Guid.NewGuid(),
-                            Name = _surveyStates[message.Chat.Id].Dispatcher,
-                            PercentDispatcher = PercentDispatcher.Asher_Hill
+                            Number = _surveyStates[message.Chat.Id].Number,
+                            CostCargo = _surveyStates[message.Chat.Id].CostCargo,
+                            PathTravel = _surveyStates[message.Chat.Id].PathTravel,
+                            DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
+                            MC = _surveyStates[message.Chat.Id].Mc,
+                            WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
+                            WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
                         };
+                        
+                        
                         break;
                 }
             }
@@ -115,10 +123,22 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         {
             surveyState.Number = message.Text;
             surveyState.CurrentStep = SurveyStep.WaitingForDispatcher;
+
+            var lines = await _dispatcherRepository.GetAllAsync();
+
+            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
+            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
             
-            await botClient.SendTextMessageAsync(
+            var inlineMarkup = new string[][]
+            {
+                firstLine,
+                secondLine
+            };
+            
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Введите дистпетчера:",
+                replyMarkup: inlineMarkup,
                 cancellationToken: cancellationToken);
         }
     }
@@ -128,10 +148,12 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
-            surveyState.Dispatcher = message.Text;
+            var dispatcher = _dispatcherRepository.GetByNameAsync(message.Text);
+            
+            surveyState.Dispatcher = dispatcher.Id.ToString();
             surveyState.CurrentStep = SurveyStep.WaitingForMC;
             
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Введите MC# компании:",
                 cancellationToken: cancellationToken);
