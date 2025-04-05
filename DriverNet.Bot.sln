@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriverNet.Bot", "DriverNet.Bot\DriverNet.Bot.csproj", "{CD751253-F0AA-43B4-B824-E838D9654904}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriverNet.Core", "DriverNet.Core\DriverNet.Core.csproj", "{A0233996-18F1-4BAD-8030-BD0E2F859515}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriverNet.Infrastructure", "DriverNet.Infrastructure\DriverNet.Infrastructure.csproj", "{CBB05248-9AFE-4386-B6A5-11E43FF54144}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DriverNet.Application", "DriverNet.Application\DriverNet.Application.csproj", "{F031B7A3-549D-42C3-80FD-081F6BED1470}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CD751253-F0AA-43B4-B824-E838D9654904}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD751253-F0AA-43B4-B824-E838D9654904}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD751253-F0AA-43B4-B824-E838D9654904}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD751253-F0AA-43B4-B824-E838D9654904}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0233996-18F1-4BAD-8030-BD0E2F859515}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0233996-18F1-4BAD-8030-BD0E2F859515}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0233996-18F1-4BAD-8030-BD0E2F859515}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0233996-18F1-4BAD-8030-BD0E2F859515}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBB05248-9AFE-4386-B6A5-11E43FF54144}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBB05248-9AFE-4386-B6A5-11E43FF54144}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBB05248-9AFE-4386-B6A5-11E43FF54144}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBB05248-9AFE-4386-B6A5-11E43FF54144}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F031B7A3-549D-42C3-80FD-081F6BED1470}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F031B7A3-549D-42C3-80FD-081F6BED1470}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F031B7A3-549D-42C3-80FD-081F6BED1470}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F031B7A3-549D-42C3-80FD-081F6BED1470}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
