@@ -8,7 +8,7 @@ public interface IDriverRepository
     
     Task<Driver> GetByNameAsync(string name);
     
-    Task Add(Driver driver);
+    Task AddAsync(Driver driver);
     
     Task Update(Driver driver);
     

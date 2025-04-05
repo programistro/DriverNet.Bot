@@ -8,7 +8,7 @@ public interface ICargoRepository
     
     Task<Cargo> GetByNumberAsync(string number);
     
-    Task Add(Cargo cargo);
+    Task AddAsync(Cargo cargo);
     
     Task Update(Cargo cargo);
     

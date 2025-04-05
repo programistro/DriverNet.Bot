@@ -8,7 +8,7 @@ public interface IDispatcherRepository
     
     Task<Dispatcher> GetByNameAsync(string name);
     
-    Task Add(Dispatcher dispatcher);
+    Task AddAsync(Dispatcher dispatcher);
     
     Task Update(Dispatcher dispatcher);
     

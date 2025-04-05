@@ -53,11 +53,13 @@ class Program
             {
                 builder.AddSingleton<IDriverRepository, DriverRepository>();
                 builder.AddSingleton<IDispatcherRepository, DispatcherRepository>();
+                builder.AddSingleton<ICargoRepository, CargoRepository>();
                 builder.AddSingleton<ITelegramBotService>(provider => 
                     new TelegramBotService(
                         botToken,
                         provider.GetRequiredService<IDriverRepository>(),
-                        provider.GetRequiredService<IDispatcherRepository>()));
+                        provider.GetRequiredService<IDispatcherRepository>(),
+                        provider.GetRequiredService<ICargoRepository>()));
             
                 builder.AddHostedService<BotBackgroundService>();
             }));

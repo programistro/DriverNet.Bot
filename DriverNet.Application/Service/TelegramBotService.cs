@@ -14,17 +14,19 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private readonly TelegramBotClient _botClient;
     private readonly IDriverRepository _driverRepository;
     private readonly IDispatcherRepository _dispatcherRepository;
+    private readonly ICargoRepository _cargoRepository;
     private CancellationTokenSource _cts;
     private static Dictionary<long, SurveyState> _surveyStates = new();
 
     public TelegramBotService(
         string botToken,
         IDriverRepository driverRepository,
-        IDispatcherRepository dispatcherRepository)
+        IDispatcherRepository dispatcherRepository, ICargoRepository cargoRepository)
     {
         _botClient = new TelegramBotClient(botToken);
         _driverRepository = driverRepository;
         _dispatcherRepository = dispatcherRepository;
+        _cargoRepository = cargoRepository;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -110,6 +112,10 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                             WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
                         };
                         
+                        await _cargoRepository.AddAsync(cargo);
+
+                        await botClient.SendMessage(message.Chat.Id, $"Груз добавлен",
+                            cancellationToken: cancellationToken);
                         
                         break;
                 }

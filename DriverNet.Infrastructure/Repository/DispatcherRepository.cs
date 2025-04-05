@@ -38,7 +38,7 @@ public class DispatcherRepository : IDispatcherRepository
         return dispatcher;
     }
 
-    public async Task Add(Dispatcher dispatcher)
+    public async Task AddAsync(Dispatcher dispatcher)
     {
         await _context.Dispatchers.AddAsync(dispatcher);
         await _context.SaveChangesAsync();

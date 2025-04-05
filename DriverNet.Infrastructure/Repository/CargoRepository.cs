@@ -38,7 +38,7 @@ public class CargoRepository : ICargoRepository
         return cargo;
     }
 
-    public async Task Add(Cargo cargo)
+    public async Task AddAsync(Cargo cargo)
     {
         await _context.Cargos.AddAsync(cargo);
         await _context.SaveChangesAsync();
