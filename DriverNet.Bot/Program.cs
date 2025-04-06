@@ -1,6 +1,7 @@
 ﻿using DriverNet.Application.Interface;
 using DriverNet.Application.Service;
 using DriverNet.Core.Interface;
+using DriverNet.Infrastructure.Data;
 using DriverNet.Infrastructure.Repository;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,7 @@ class Program
         
         try
         {
-            await botService.StartAsync(CancellationToken.None);
+            // await botService.StartAsync(CancellationToken.None);
             await host.RunAsync();
         }
         catch (Exception ex)
@@ -40,7 +41,7 @@ class Program
             .AddEnvironmentVariables(prefix: "DOTNET_")
             .Build();
 
-        string botToken = "7769384625:AAEax8C0ZpyIP_qY0NNYk4c3pRZLlyi4tLY";
+        string botToken = "7769384625:AAGvwQjURncRstEcILTjXXpPhGaiMEDevQ4";
         
         return Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((context, services) =>
@@ -51,6 +52,7 @@ class Program
             })
             .ConfigureServices((builder =>
             {
+                builder.AddDbContextFactory<AppDbContext>();
                 builder.AddSingleton<IDriverRepository, DriverRepository>();
                 builder.AddSingleton<IDispatcherRepository, DispatcherRepository>();
                 builder.AddSingleton<ICargoRepository, CargoRepository>();

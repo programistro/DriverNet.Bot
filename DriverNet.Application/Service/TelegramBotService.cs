@@ -36,6 +36,20 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         var me = await _botClient.GetMeAsync(cancellationToken);
         Console.WriteLine($"Bot {me.Username} started");
         
+        try
+        {
+            var webhookInfo = await _botClient.GetWebhookInfoAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(webhookInfo.Url))
+            {
+                Console.WriteLine($"Deleting active webhook: {webhookInfo.Url}");
+                await _botClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error while checking/deleting webhook: {ex.Message}");
+        }
+        
         _botClient.StartReceiving(
             updateHandler: HandleUpdateAsync,
             errorHandler: HandlePollingErrorAsync,
@@ -53,73 +67,64 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         Console.WriteLine("Bot stopped");
     }
 
-    private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update,
+        CancellationToken cancellationToken)
     {
         var message = update.Message;
 
-        if (message?.Type != MessageType.Text && !string.IsNullOrWhiteSpace(message?.Text))
+        if (message?.Type != MessageType.Text || string.IsNullOrWhiteSpace(message?.Text))
+            return;
+
+        if (message.Text.StartsWith("/load"))
         {
-            if (message.Text.StartsWith("/driver-load"))
+            if (_surveyStates.ContainsKey(message.Chat.Id))
             {
-                if (!_surveyStates.ContainsKey(message.Chat.Id))
-                {
-                    _surveyStates[message.Chat.Id] = new SurveyState
-                    {
-                        CurrentStep = SurveyStep.WaitingForNumber
-                    };
-
-                    await botClient.SendTextMessageAsync(message.Chat.Id, "Введите номер груза",
-                        cancellationToken: cancellationToken);
-                    
-                    return;
-                }
-                
-                var currentStep = _surveyStates[message.Chat.Id];
-
-                switch (currentStep.CurrentStep)
-                {
-                    case SurveyStep.WaitingForNumber:
-                        await HandleNumberAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.WaitingForDispatcher:
-                        await HandleDispatcherAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.WaitingForMC:
-                        await HandleMcAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.WaitingForMileWithCargo:
-                        await HandleWithMileAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.WaitingForMileWithoutCargo:
-                        await HandleMileInputAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.CostCargo:
-                        await HandleCostCargoAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.PathTravel:
-                        await HandlePathTrabelAsync(botClient, message, currentStep, cancellationToken);
-                        break;
-                    case SurveyStep.None:
-                        Cargo cargo = new()
-                        {
-                            Id = Guid.NewGuid(),
-                            Number = _surveyStates[message.Chat.Id].Number,
-                            CostCargo = _surveyStates[message.Chat.Id].CostCargo,
-                            PathTravel = _surveyStates[message.Chat.Id].PathTravel,
-                            DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
-                            MC = _surveyStates[message.Chat.Id].Mc,
-                            WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
-                            WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
-                        };
-                        
-                        await _cargoRepository.AddAsync(cargo);
-
-                        await botClient.SendMessage(message.Chat.Id, $"Груз добавлен",
-                            cancellationToken: cancellationToken);
-                        
-                        break;
-                }
+                _surveyStates[message.Chat.Id] = new SurveyState { CurrentStep = SurveyStep.WaitingForNumber };
             }
+            else
+            {
+                _surveyStates.Add(message.Chat.Id, new SurveyState { CurrentStep = SurveyStep.WaitingForNumber });
+            }
+        }
+
+        if (!_surveyStates.ContainsKey(message.Chat.Id))
+        {
+            _surveyStates[message.Chat.Id] = new SurveyState
+            {
+                CurrentStep = SurveyStep.WaitingForNumber
+            };
+
+            await botClient.SendTextMessageAsync(message.Chat.Id, "Введите номер груза",
+                cancellationToken: cancellationToken);
+
+            return;
+        }
+
+        var currentStep = _surveyStates[message.Chat.Id];
+
+        switch (currentStep.CurrentStep)
+        {
+            case SurveyStep.WaitingForNumber:
+                await HandleNumberAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.WaitingForDispatcher:
+                await HandleDispatcherAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.WaitingForMC:
+                await HandleMcAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.WaitingForMileWithCargo:
+                await HandleWithMileAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.WaitingForMileWithoutCargo:
+                await HandleMileInputAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.CostCargo:
+                await HandleCostCargoAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case SurveyStep.PathTravel:
+                await HandlePathTravelAsync(botClient, message, currentStep, cancellationToken);
+                break;
         }
     }
 
@@ -186,13 +191,21 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
-            surveyState.MileWithoutCargo = double.Parse(message.Text);
-            surveyState.CurrentStep = SurveyStep.WaitingForMileWithCargo;
+            if (double.TryParse(message.Text, out double mile))
+            {
+                surveyState.MileWithoutCargo = mile;
+                surveyState.CurrentStep = SurveyStep.WaitingForMileWithCargo;
             
-            await botClient.SendTextMessageAsync(
-                chatId: message.Chat.Id,
-                text: "Введите сколько миль с грузом:",
-                cancellationToken: cancellationToken);
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "Введите сколько миль с грузом:",
+                    cancellationToken: cancellationToken);
+            }
+            else
+            {
+                await botClient.SendMessage(message.Chat.Id, "Введите корректные данные!",
+                    cancellationToken: cancellationToken);
+            }
         }
     }
     
@@ -201,32 +214,43 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
-            surveyState.MileWithCargo = double.Parse(message.Text);
-            surveyState.CurrentStep = SurveyStep.CostCargo;
+            if (double.TryParse(message.Text, out double mile))
+            {
+                surveyState.MileWithCargo = mile;
+                surveyState.CurrentStep = SurveyStep.CostCargo;
             
-            await botClient.SendTextMessageAsync(
-                chatId: message.Chat.Id,
-                text: "Введите сколько платят за груз:",
-                cancellationToken: cancellationToken);
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "Введите сколько платят за груз:",
+                    cancellationToken: cancellationToken);
+            }
         }
     }
     
     private async Task HandleCostCargoAsync(ITelegramBotClient botClient, Message message,
         SurveyState surveyState, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(message.Text))
+        if (double.TryParse(message.Text, out double costCargo))
         {
-            surveyState.CostCargo = double.Parse(message.Text);
-            surveyState.CurrentStep = SurveyStep.PathTravel;
+            if (!string.IsNullOrWhiteSpace(message.Text))
+            {
+                surveyState.CostCargo = costCargo;
+                surveyState.CurrentStep = SurveyStep.PathTravel;
             
-            await botClient.SendTextMessageAsync(
-                chatId: message.Chat.Id,
-                text: "Маршрут: из какого штата/города \u2192 в какой штат/город:",
+                await botClient.SendTextMessageAsync(
+                    chatId: message.Chat.Id,
+                    text: "Маршрут: из какого штата/города \u2192 в какой штат/город:",
+                    cancellationToken: cancellationToken);
+            }
+        }
+        else
+        {
+            await botClient.SendMessage(message.Chat.Id, "Введите корректные данные!",
                 cancellationToken: cancellationToken);
         }
     }
     
-    private async Task HandlePathTrabelAsync(ITelegramBotClient botClient, Message message,
+    private async Task HandlePathTravelAsync(ITelegramBotClient botClient, Message message,
         SurveyState surveyState, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
@@ -234,10 +258,24 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             surveyState.PathTravel = message.Text;
             surveyState.CurrentStep = SurveyStep.None;
             
-            // await botClient.SendTextMessageAsync(
-            //     chatId: message.Chat.Id,
-            //     text: "Маршрут: из какого штата/города \u2192 в какой штат/город:",
-            //     cancellationToken: cancellationToken);
+            Cargo cargo = new()
+            {
+                Id = Guid.NewGuid(),
+                Number = _surveyStates[message.Chat.Id].Number,
+                CostCargo = _surveyStates[message.Chat.Id].CostCargo,
+                PathTravel = _surveyStates[message.Chat.Id].PathTravel,
+                DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
+                MC = _surveyStates[message.Chat.Id].Mc,
+                WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
+                WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
+            };
+
+            await _cargoRepository.AddAsync(cargo);
+
+            await botClient.SendMessage(message.Chat.Id, $"Груз добавлен",
+                cancellationToken: cancellationToken);
+            
+            _surveyStates.Remove(message.Chat.Id);
         }
     }
     
