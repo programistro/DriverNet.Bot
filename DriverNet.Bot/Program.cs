@@ -59,9 +59,9 @@ class Program
                 builder.AddSingleton<ITelegramBotService>(provider => 
                     new TelegramBotService(
                         botToken,
-                        provider.GetRequiredService<IDriverRepository>(),
-                        provider.GetRequiredService<IDispatcherRepository>(),
-                        provider.GetRequiredService<ICargoRepository>()));
+                        provider.GetRequiredService<IDriverService>(),
+                        provider.GetRequiredService<IDispatcherService>(),
+                        provider.GetRequiredService<ICargoService>()));
             
                 builder.AddHostedService<BotBackgroundService>();
             }));
