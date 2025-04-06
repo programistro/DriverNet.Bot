@@ -1,4 +1,5 @@
-﻿using DriverNet.Application.Interface;
+﻿using System.Xml.Linq;
+using DriverNet.Application.Interface;
 using DriverNet.Core.Interface;
 using DriverNet.Core.Models;
 using Telegram.Bot;
@@ -144,6 +145,63 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             case CargoStep.PathTravel:
                 await HandlePathTravelAsync(botClient, message, currentStep, cancellationToken);
                 break;
+            case CargoStep.ChangeStep:
+                await HandleChangeStepAsync(botClient, message, currentStep, cancellationToken);
+                break;
+            case CargoStep.WhatChange:
+                await HandleWhatChangeAsync(botClient, message, currentStep, cancellationToken);
+                break;
+        }
+    }
+
+    private async Task HandleWhatChangeAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(message.Text))
+        {
+            if (message.Text == "MC#")
+            {
+                state.CurrentStep = CargoStep.MC;
+                
+                await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
+            }
+
+            if (message.Text == "")
+            {
+                //todo с остальными паркаметрами так же сделать
+            }
+        }
+    }
+
+    private async Task HandleChangeStepAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(message.Text))
+        {
+            if (message.Text.ToLower() == "нет")
+            {
+                Cargo cargo = new()
+                {
+                    Id = Guid.NewGuid(),
+                    Number = _surveyStates[message.Chat.Id].Number,
+                    CostCargo = _surveyStates[message.Chat.Id].CostCargo,
+                    PathTravel = _surveyStates[message.Chat.Id].PathTravel,
+                    DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
+                    MC = _surveyStates[message.Chat.Id].Mc,
+                    WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
+                    WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
+                };
+
+                await _cargoRepository.AddAsync(cargo);
+                _surveyStates.Remove(message.Chat.Id);
+                
+                await botClient.SendMessage(message.Chat.Id, "Груз добавлен", cancellationToken: cancellationToken);
+            }
+
+            if (message.Text.ToLower() == "да")
+            {
+                state.CurrentStep = CargoStep.WhatChange;
+                
+                await botClient.SendMessage(message.Chat.Id, "Что хотите изменить?", cancellationToken: cancellationToken);
+            }
         }
     }
 
@@ -275,26 +333,10 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.PathTravel = message.Text;
-            surveyState.CurrentStep = CargoStep.None;
-            
-            Cargo cargo = new()
-            {
-                Id = Guid.NewGuid(),
-                Number = _surveyStates[message.Chat.Id].Number,
-                CostCargo = _surveyStates[message.Chat.Id].CostCargo,
-                PathTravel = _surveyStates[message.Chat.Id].PathTravel,
-                DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
-                MC = _surveyStates[message.Chat.Id].Mc,
-                WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
-                WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
-            };
+            surveyState.CurrentStep = CargoStep.ChangeStep;
 
-            await _cargoRepository.AddAsync(cargo);
-
-            await botClient.SendMessage(message.Chat.Id, $"Груз добавлен",
+            await botClient.SendMessage(message.Chat.Id, $"Хотите ли изменить груз?",
                 cancellationToken: cancellationToken);
-            
-            _surveyStates.Remove(message.Chat.Id);
         }
     }
 

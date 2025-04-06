@@ -21,5 +21,7 @@ public enum CargoStep
     /// <summary>
     /// маршрут: из какого штата/города → в какой штат/город
     /// </summary>
-    PathTravel = 7
+    PathTravel = 7,
+    ChangeStep = 8,
+    WhatChange = 9,
 }
