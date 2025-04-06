@@ -17,6 +17,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private readonly ICargoRepository _cargoRepository;
     private CancellationTokenSource _cts;
     private static Dictionary<long, SurveyState> _surveyStates = new();
+    private static DriverState _driverState = new();
 
     public TelegramBotService(
         string botToken,
@@ -75,15 +76,33 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (message?.Type != MessageType.Text || string.IsNullOrWhiteSpace(message?.Text))
             return;
 
-        if (message.Text.StartsWith("/load"))
+        if (message.Chat.Id == -4713702986)
+        {
+            if (message.Text == "/add-driver")
+            {
+                _driverState.Step = DriverStep.Name;
+
+                switch (_driverState.Step)
+                {
+                    case DriverStep.Name:
+                        await HandleNameDriver(botClient, message, _driverState, cancellationToken);
+                        break;
+                    case DriverStep.McNumber:
+                        await HandleMCNumber(botClient, message, _driverState, cancellationToken);
+                        break;
+                }
+            }
+        }
+        
+        if (message.Text =="/load")
         {
             if (_surveyStates.ContainsKey(message.Chat.Id))
             {
-                _surveyStates[message.Chat.Id] = new SurveyState { CurrentStep = SurveyStep.WaitingForNumber };
+                _surveyStates[message.Chat.Id] = new SurveyState { CurrentStep = CargoStep.Number };
             }
             else
             {
-                _surveyStates.Add(message.Chat.Id, new SurveyState { CurrentStep = SurveyStep.WaitingForNumber });
+                _surveyStates.Add(message.Chat.Id, new SurveyState { CurrentStep = CargoStep.Number });
             }
         }
 
@@ -91,10 +110,10 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         {
             _surveyStates[message.Chat.Id] = new SurveyState
             {
-                CurrentStep = SurveyStep.WaitingForNumber
+                CurrentStep = CargoStep.Number
             };
 
-            await botClient.SendTextMessageAsync(message.Chat.Id, "Введите номер груза",
+            await botClient.SendMessage(message.Chat.Id, "Введите номер груза",
                 cancellationToken: cancellationToken);
 
             return;
@@ -104,25 +123,25 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
         switch (currentStep.CurrentStep)
         {
-            case SurveyStep.WaitingForNumber:
+            case CargoStep.Number:
                 await HandleNumberAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.WaitingForDispatcher:
+            case CargoStep.Dispatcher:
                 await HandleDispatcherAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.WaitingForMC:
+            case CargoStep.MC:
                 await HandleMcAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.WaitingForMileWithCargo:
+            case CargoStep.MileWithCargo:
                 await HandleWithMileAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.WaitingForMileWithoutCargo:
+            case CargoStep.WithoutCargo:
                 await HandleMileInputAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.CostCargo:
+            case CargoStep.CostCargo:
                 await HandleCostCargoAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case SurveyStep.PathTravel:
+            case CargoStep.PathTravel:
                 await HandlePathTravelAsync(botClient, message, currentStep, cancellationToken);
                 break;
         }
@@ -133,7 +152,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.Number = message.Text;
-            surveyState.CurrentStep = SurveyStep.WaitingForDispatcher;
+            surveyState.CurrentStep = CargoStep.Dispatcher;
 
             var lines = await _dispatcherRepository.GetAllAsync();
 
@@ -162,7 +181,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             var dispatcher = _dispatcherRepository.GetByNameAsync(message.Text);
             
             surveyState.Dispatcher = dispatcher.Id.ToString();
-            surveyState.CurrentStep = SurveyStep.WaitingForMC;
+            surveyState.CurrentStep = CargoStep.MC;
             
             await botClient.SendMessage(
                 chatId: message.Chat.Id,
@@ -177,9 +196,9 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.Mc = message.Text;
-            surveyState.CurrentStep = SurveyStep.WaitingForMileWithoutCargo;
+            surveyState.CurrentStep = CargoStep.WithoutCargo;
             
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Введите сколько миль пустым:",
                 cancellationToken: cancellationToken);
@@ -194,7 +213,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             if (double.TryParse(message.Text, out double mile))
             {
                 surveyState.MileWithoutCargo = mile;
-                surveyState.CurrentStep = SurveyStep.WaitingForMileWithCargo;
+                surveyState.CurrentStep = CargoStep.MileWithCargo;
             
                 await botClient.SendMessage(
                     chatId: message.Chat.Id,
@@ -217,7 +236,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             if (double.TryParse(message.Text, out double mile))
             {
                 surveyState.MileWithCargo = mile;
-                surveyState.CurrentStep = SurveyStep.CostCargo;
+                surveyState.CurrentStep = CargoStep.CostCargo;
             
                 await botClient.SendMessage(
                     chatId: message.Chat.Id,
@@ -235,7 +254,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             if (!string.IsNullOrWhiteSpace(message.Text))
             {
                 surveyState.CostCargo = costCargo;
-                surveyState.CurrentStep = SurveyStep.PathTravel;
+                surveyState.CurrentStep = CargoStep.PathTravel;
             
                 await botClient.SendTextMessageAsync(
                     chatId: message.Chat.Id,
@@ -256,7 +275,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.PathTravel = message.Text;
-            surveyState.CurrentStep = SurveyStep.None;
+            surveyState.CurrentStep = CargoStep.None;
             
             Cargo cargo = new()
             {
@@ -278,7 +297,40 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             _surveyStates.Remove(message.Chat.Id);
         }
     }
-    
+
+    private async Task HandleNameDriver(ITelegramBotClient botClient, Message message, DriverState state,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(message.Text))
+        {
+            state.Step = DriverStep.McNumber;
+            state.Name = message.Text;
+
+            await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
+        }
+    }
+
+    private async Task HandleMCNumber(ITelegramBotClient botClient, Message message, DriverState state,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(message.Text))
+        {
+            state.Step = DriverStep.None;
+            state.McNumber = message.Text;
+
+            Driver driver = new()
+            {
+                Id = Guid.NewGuid(),
+                Name = state.Name,
+                MCNumber = state.McNumber
+            };
+            
+            await _driverRepository.AddAsync(driver);
+            
+            await botClient.SendMessage(message.Chat.Id, "Водитель добавлен", cancellationToken: cancellationToken);
+        }
+    }
+
     private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
     {
         Console.WriteLine($"Polling error: {exception.Message}");

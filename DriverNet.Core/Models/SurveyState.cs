@@ -28,5 +28,5 @@ public class SurveyState
     /// </summary>
     public string PathTravel { get; set; }
     
-    public SurveyStep CurrentStep { get; set; }
+    public CargoStep CurrentStep { get; set; }
 }

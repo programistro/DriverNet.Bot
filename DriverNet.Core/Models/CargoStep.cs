@@ -1,19 +1,19 @@
 ﻿namespace DriverNet.Core.Models;
 
-public enum SurveyStep
+public enum CargoStep
 {
     None = 0,
-    WaitingForNumber = 1,
-    WaitingForDispatcher = 2,
-    WaitingForMC = 3,
+    Number = 1,
+    Dispatcher = 2,
+    MC = 3,
     /// <summary>
     /// миль без груза
     /// </summary>
-    WaitingForMileWithoutCargo = 4,
+    WithoutCargo = 4,
     /// <summary>
     /// миль с грузом
     /// </summary>
-    WaitingForMileWithCargo = 5,
+    MileWithCargo = 5,
     /// <summary>
     /// сколько платят за груз
     /// </summary>
