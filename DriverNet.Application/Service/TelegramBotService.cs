@@ -72,12 +72,42 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update,
         CancellationToken cancellationToken)
     {
-        var message = update.Message;
-
-        if (message?.Type != MessageType.Text || string.IsNullOrWhiteSpace(message?.Text))
+        if(update == null)
             return;
+        
+        if (update.CallbackQuery != null)
+        {
+            if (update.CallbackQuery.Data.StartsWith("dispatcher-"))
+            {
+                var findDispatcher = await _dispatcherService.GetByNameAsync(update.CallbackQuery.Data.Replace("dispatcher-", ""));
+                
+                _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.Dispatcher;
+                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = findDispatcher.Id.ToString();
 
-        if (message.Chat.Id == -4713702986)
+                await HandleDispatcherAsync(_botClient, update.CallbackQuery.Message,
+                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
+                
+                return;
+            }
+
+            if (update.CallbackQuery.Data.StartsWith("change-"))
+            {
+                switch (update.CallbackQuery.Data.Replace("number-", ""))
+                {
+                    case "number":
+                        await HandleNumberAsync(_botClient, update.CallbackQuery.Message,
+                            _surveyStates[update.CallbackQuery.Message.Chat.Id],
+                            cancellationToken);
+                        break;
+                }
+                
+                return;
+            }
+        }
+        
+        var message = update.Message;
+        
+        if (!string.IsNullOrEmpty(message?.Text) && message.Chat.Id == -4713702986)
         {
             if (message.Text == "/add-driver")
             {
@@ -95,7 +125,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             }
         }
         
-        if (message.Text =="/load")
+        if (!string.IsNullOrEmpty(message?.Text) && message.Text =="/load")
         {
             if (_surveyStates.ContainsKey(message.Chat.Id))
             {
@@ -148,9 +178,6 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             case CargoStep.ChangeStep:
                 await HandleChangeStepAsync(botClient, message, currentStep, cancellationToken);
                 break;
-            case CargoStep.WhatChange:
-                await HandleWhatChangeAsync(botClient, message, currentStep, cancellationToken);
-                break;
         }
     }
 
@@ -160,14 +187,14 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         {
             if (message.Text == "MC#")
             {
-                state.CurrentStep = CargoStep.MC;
-                
-                await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
+                // state.CurrentStep = CargoStep.MC;
+                //
+                // await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
+                await HandleMcAsync(botClient, message, state, cancellationToken, true);
             }
-
             if (message.Text == "")
             {
-                //todo с остальными паркаметрами так же сделать
+                
             }
         }
     }
@@ -198,9 +225,21 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
             if (message.Text.ToLower() == "да")
             {
-                state.CurrentStep = CargoStep.WhatChange;
+                //todo разобраться с водилой и MC#
                 
-                await botClient.SendMessage(message.Chat.Id, "Что хотите изменить?", cancellationToken: cancellationToken);
+                var keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    InlineKeyboardButton.WithCallbackData("Номер груза", $"change-number"),
+                    InlineKeyboardButton.WithCallbackData("Диспетчера", $"change-dispatcher"),
+                    // InlineKeyboardButton.WithCallbackData("Водителя", $"change-"),
+                    InlineKeyboardButton.WithCallbackData("MC# компании", $"change-mc"),
+                    InlineKeyboardButton.WithCallbackData("Сколько миль пустым", $"change-without mile"),
+                    InlineKeyboardButton.WithCallbackData("Сколько миль с грузом", $"change-mile withcargo"),
+                    InlineKeyboardButton.WithCallbackData("Маршрут", $"change-path"),
+                });
+
+                await botClient.SendMessage(message.Chat.Id, "Что хотите изменить?", replyMarkup: keyboard,
+                    cancellationToken: cancellationToken);
             }
         }
     }
@@ -210,23 +249,34 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.Number = message.Text;
-            surveyState.CurrentStep = CargoStep.Dispatcher;
+            // surveyState.CurrentStep = CargoStep.Dispatcher;
 
             var lines = await _dispatcherService.GetAllAsync();
 
             var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
             var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
             
-            var inlineMarkup = new string[][]
+            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
+
+            for (int i = 0; i < firstLine.Length; i++)
             {
-                firstLine,
-                secondLine
-            };
+                var secondButton = i < secondLine.Length 
+                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"dispatcher-{secondLine[i]}") 
+                    : null;
+    
+                inlineKeyboard[i] = new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"dispatcher-{firstLine[i]}"),
+                    secondButton
+                }.Where(b => b != null).ToArray();
+            }
+
+            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
             
             await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Введите дистпетчера:",
-                replyMarkup: inlineMarkup,
+                replyMarkup: replyMarkup,
                 cancellationToken: cancellationToken);
         }
     }
@@ -236,9 +286,9 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
-            var dispatcher = _dispatcherService.GetByNameAsync(message.Text);
+            var dispatcher = await _dispatcherService.GetByNameAsync(message.Text);
             
-            surveyState.Dispatcher = dispatcher.Id.ToString();
+            // surveyState.Dispatcher = dispatcher.Id.ToString();
             surveyState.CurrentStep = CargoStep.MC;
             
             await botClient.SendMessage(
@@ -249,17 +299,25 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     }
     
     private async Task HandleMcAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
+        SurveyState surveyState, CancellationToken cancellationToken, bool changStep = false)
     {
         if (!string.IsNullOrWhiteSpace(message.Text))
         {
             surveyState.Mc = message.Text;
-            surveyState.CurrentStep = CargoStep.WithoutCargo;
+
+            if (changStep)
+            {
+                surveyState.CurrentStep = CargoStep.None;
+            }
+            else
+            {
+                surveyState.CurrentStep = CargoStep.WithoutCargo;
             
-            await botClient.SendMessage(
-                chatId: message.Chat.Id,
-                text: "Введите сколько миль пустым:",
-                cancellationToken: cancellationToken);
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "Введите сколько миль пустым:",
+                    cancellationToken: cancellationToken);
+            }
         }
     }
     
