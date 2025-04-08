@@ -16,19 +16,22 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private readonly IDriverService _driverService;
     private readonly IDispatcherService _dispatcherService;
     private readonly ICargoService _cargoService;
+    protected readonly IMcService _mcService;
     private CancellationTokenSource _cts;
     private static Dictionary<long, SurveyState> _surveyStates = new();
     private static DriverState _driverState = new();
+    private static AdminStep _adminStep = new();
 
     public TelegramBotService(
         string botToken,
         IDriverService driverService,
-        IDispatcherService dispatcherService, ICargoService cargoService)
+        IDispatcherService dispatcherService, ICargoService cargoService, IMcService mcService)
     {
         _botClient = new TelegramBotClient(botToken);
         _driverService = driverService;
         _dispatcherService = dispatcherService;
         _cargoService = cargoService;
+        _mcService = mcService;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -72,9 +75,6 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update,
         CancellationToken cancellationToken)
     {
-        if(update == null)
-            return;
-        
         if (update.CallbackQuery != null)
         {
             if (update.CallbackQuery.Data.StartsWith("dispatcher-"))
@@ -90,6 +90,32 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 return;
             }
 
+            if (update.CallbackQuery.Data.StartsWith("driver-"))
+            {
+                var findDriver = await _driverService.GetByNameAsync(update.CallbackQuery.Data.Replace("driver-", ""));
+                
+                // _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.WithoutCargo;
+                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = findDriver.Id.ToString();
+
+                await HandleMileInputAsync(_botClient, update.CallbackQuery.Message,
+                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
+                
+                return;
+            }
+
+            if (update.CallbackQuery.Data.StartsWith("mc-"))
+            {
+                var mc = await _mcService.GetByNameAsync(update.CallbackQuery.Data.Replace("mc-", ""));
+                
+                // _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.;
+                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = mc.Id.ToString();
+
+                await HandleDriverAsync(_botClient, update.CallbackQuery.Message,
+                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
+                
+                return;
+            }
+            
             if (update.CallbackQuery.Data.StartsWith("change-"))
             {
                 switch (update.CallbackQuery.Data.Replace("number-", ""))
@@ -112,17 +138,31 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             if (message.Text == "/add-driver")
             {
                 _driverState.Step = DriverStep.Name;
-
-                switch (_driverState.Step)
-                {
-                    case DriverStep.Name:
-                        await HandleNameDriver(botClient, message, _driverState, cancellationToken);
-                        break;
-                    case DriverStep.McNumber:
-                        await HandleMCNumber(botClient, message, _driverState, cancellationToken);
-                        break;
-                }
             }
+
+            if (message.Text == "/add-dispatcher")
+            {
+                _adminStep = AdminStep.Dispatcher;
+            }
+
+            switch (_adminStep)
+            {
+                case AdminStep.Dispatcher:
+                    
+                    break;
+            }
+            
+            switch (_driverState.Step)
+            {
+                case DriverStep.Name:
+                    await HandleNameDriver(botClient, message, _driverState, cancellationToken);
+                    break;
+                case DriverStep.McNumber:
+                    await HandleMCNumber(botClient, message, _driverState, cancellationToken);
+                    break;
+            }
+            
+            return;
         }
         
         if (!string.IsNullOrEmpty(message?.Text) && message.Text =="/load")
@@ -157,6 +197,9 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             case CargoStep.Number:
                 await HandleNumberAsync(botClient, message, currentStep, cancellationToken);
                 break;
+            case CargoStep.Driver:
+                await HandleDriverAsync(botClient, message, currentStep, cancellationToken);
+                break;
             case CargoStep.Dispatcher:
                 await HandleDispatcherAsync(botClient, message, currentStep, cancellationToken);
                 break;
@@ -178,6 +221,41 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             case CargoStep.ChangeStep:
                 await HandleChangeStepAsync(botClient, message, currentStep, cancellationToken);
                 break;
+        }
+    }
+
+    private async Task HandleDriverAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(message.Text))
+        {
+            // state.CurrentStep = CargoStep.MC;
+            var lines = await _driverService.GetAllAsync();
+
+            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
+            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
+            
+            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
+
+            for (int i = 0; i < firstLine.Length; i++)
+            {
+                var secondButton = i < secondLine.Length 
+                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"driver-{secondLine[i]}") 
+                    : null;
+    
+                inlineKeyboard[i] = new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"druver-{firstLine[i]}"),
+                    secondButton
+                }.Where(b => b != null).ToArray();
+            }
+
+            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
+            
+            await botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "Введите водителя:",
+                replyMarkup: replyMarkup,
+                cancellationToken: cancellationToken);
         }
     }
 
@@ -275,7 +353,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             
             await botClient.SendMessage(
                 chatId: message.Chat.Id,
-                text: "Введите дистпетчера:",
+                text: "Введите диспетчера:",
                 replyMarkup: replyMarkup,
                 cancellationToken: cancellationToken);
         }
@@ -289,10 +367,33 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             var dispatcher = await _dispatcherService.GetByNameAsync(message.Text);
             
             // surveyState.Dispatcher = dispatcher.Id.ToString();
-            surveyState.CurrentStep = CargoStep.MC;
+            // surveyState.CurrentStep = CargoStep.MC;
+         
+            var lines = await _mcService.GetAllAsync();
+
+            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
+            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
+            
+            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
+
+            for (int i = 0; i < firstLine.Length; i++)
+            {
+                var secondButton = i < secondLine.Length 
+                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"mc-{secondLine[i]}") 
+                    : null;
+    
+                inlineKeyboard[i] = new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"mc-{firstLine[i]}"),
+                    secondButton
+                }.Where(b => b != null).ToArray();
+            }
+
+            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
             
             await botClient.SendMessage(
                 chatId: message.Chat.Id,
+                replyMarkup: replyMarkup,
                 text: "Введите MC# компании:",
                 cancellationToken: cancellationToken);
         }
