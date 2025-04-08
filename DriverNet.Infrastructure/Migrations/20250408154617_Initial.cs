@@ -54,6 +54,18 @@ namespace DriverNet.Infrastructure.Migrations
                 {
                     table.PrimaryKey("PK_Drivers", x => x.Id);
                 });
+
+            migrationBuilder.CreateTable(
+                name: "McModels",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_McModels", x => x.Id);
+                });
         }
 
         /// <inheritdoc />
@@ -67,6 +79,9 @@ namespace DriverNet.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Drivers");
+
+            migrationBuilder.DropTable(
+                name: "McModels");
         }
     }
 }

@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriverNet.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250406091334_Initial")]
+    [Migration("20250408154617_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -96,6 +96,21 @@ namespace DriverNet.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Drivers");
+                });
+
+            modelBuilder.Entity("DriverNet.Core.Models.McModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("McModels");
                 });
 #pragma warning restore 612, 618
         }

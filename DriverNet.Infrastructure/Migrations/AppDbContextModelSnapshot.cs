@@ -94,6 +94,21 @@ namespace DriverNet.Infrastructure.Migrations
 
                     b.ToTable("Drivers");
                 });
+
+            modelBuilder.Entity("DriverNet.Core.Models.McModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("McModels");
+                });
 #pragma warning restore 612, 618
         }
     }

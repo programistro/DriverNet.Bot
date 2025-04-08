@@ -24,4 +24,8 @@ public enum CargoStep
     PathTravel = 7,
     ChangeStep = 8,
     WhatChange = 9,
+    /// <summary>
+    /// водила
+    /// </summary>
+    Driver = 10
 }

@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     
     public DbSet<Cargo> Cargos => Set<Cargo>();
     
+    public DbSet<McModel> McModels => Set<McModel>();
+    
     // public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
     
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
