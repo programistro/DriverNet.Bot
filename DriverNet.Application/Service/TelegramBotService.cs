@@ -72,466 +72,310 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         Console.WriteLine("Bot stopped");
     }
 
-    private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update,
-        CancellationToken cancellationToken)
+        private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
         if (update.CallbackQuery != null)
         {
-            if (update.CallbackQuery.Data.StartsWith("dispatcher-"))
-            {
-                var findDispatcher = await _dispatcherService.GetByNameAsync(update.CallbackQuery.Data.Replace("dispatcher-", ""));
-                
-                _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.Dispatcher;
-                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = findDispatcher.Id.ToString();
-
-                await HandleDispatcherAsync(_botClient, update.CallbackQuery.Message,
-                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
-                
-                return;
-            }
-
-            if (update.CallbackQuery.Data.StartsWith("driver-"))
-            {
-                var findDriver = await _driverService.GetByNameAsync(update.CallbackQuery.Data.Replace("driver-", ""));
-                
-                // _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.WithoutCargo;
-                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = findDriver.Id.ToString();
-
-                await HandleMileInputAsync(_botClient, update.CallbackQuery.Message,
-                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
-                
-                return;
-            }
-
-            if (update.CallbackQuery.Data.StartsWith("mc-"))
-            {
-                var mc = await _mcService.GetByNameAsync(update.CallbackQuery.Data.Replace("mc-", ""));
-                
-                // _surveyStates[update.CallbackQuery.Message.Chat.Id].CurrentStep = CargoStep.;
-                _surveyStates[update.CallbackQuery.Message.Chat.Id].Dispatcher = mc.Id.ToString();
-
-                await HandleDriverAsync(_botClient, update.CallbackQuery.Message,
-                    _surveyStates[update.CallbackQuery.Message.Chat.Id], cancellationToken);
-                
-                return;
-            }
-            
-            if (update.CallbackQuery.Data.StartsWith("change-"))
-            {
-                switch (update.CallbackQuery.Data.Replace("number-", ""))
-                {
-                    case "number":
-                        await HandleNumberAsync(_botClient, update.CallbackQuery.Message,
-                            _surveyStates[update.CallbackQuery.Message.Chat.Id],
-                            cancellationToken);
-                        break;
-                }
-                
-                return;
-            }
+            await HandleCallbackQueryAsync(botClient, update.CallbackQuery, cancellationToken);
+            return;
         }
-        
+
         var message = update.Message;
-        
-        if (!string.IsNullOrEmpty(message?.Text) && message.Chat.Id == -4713702986)
+        if (message == null) return;
+
+        // Обработка команды /load
+        if (message.Text == "/load")
         {
-            if (message.Text == "/add-driver")
-            {
-                _driverState.Step = DriverStep.Name;
-            }
+            StartNewSurvey(message.Chat.Id);
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Введите номер загрузки:",
+                cancellationToken: cancellationToken);
+            return;
+        }
 
-            if (message.Text == "/add-dispatcher")
+        // Обработка шагов опроса
+        if (_surveyStates.TryGetValue(message.Chat.Id, out var currentState))
+        {
+            switch (currentState.CurrentStep)
             {
-                _adminStep = AdminStep.Dispatcher;
-            }
-
-            switch (_adminStep)
-            {
-                case AdminStep.Dispatcher:
+                case CargoStep.Number:
+                    await HandleNumberInputAsync(botClient, message, currentState, cancellationToken);
+                    break;
                     
+                case CargoStep.MileWithCargo:
+                    await HandleMileWithCargoInputAsync(botClient, message, currentState, cancellationToken);
+                    break;
+                    
+                case CargoStep.MileWithoutCargo:
+                    await HandleMileWithoutCargoInputAsync(botClient, message, currentState, cancellationToken);
+                    break;
+                    
+                case CargoStep.CostCargo:
+                    await HandleCostCargoInputAsync(botClient, message, currentState, cancellationToken);
+                    break;
+                    
+                case CargoStep.PathTravel:
+                    await HandlePathTravelInputAsync(botClient, message, currentState, cancellationToken);
                     break;
             }
-            
-            switch (_driverState.Step)
-            {
-                case DriverStep.Name:
-                    await HandleNameDriver(botClient, message, _driverState, cancellationToken);
-                    break;
-                case DriverStep.McNumber:
-                    await HandleMCNumber(botClient, message, _driverState, cancellationToken);
-                    break;
-            }
-            
-            return;
-        }
-        
-        if (!string.IsNullOrEmpty(message?.Text) && message.Text =="/load")
-        {
-            if (_surveyStates.ContainsKey(message.Chat.Id))
-            {
-                _surveyStates[message.Chat.Id] = new SurveyState { CurrentStep = CargoStep.Number };
-            }
-            else
-            {
-                _surveyStates.Add(message.Chat.Id, new SurveyState { CurrentStep = CargoStep.Number });
-            }
-        }
-
-        if (!_surveyStates.ContainsKey(message.Chat.Id))
-        {
-            _surveyStates[message.Chat.Id] = new SurveyState
-            {
-                CurrentStep = CargoStep.Number
-            };
-
-            await botClient.SendMessage(message.Chat.Id, "Введите номер груза",
-                cancellationToken: cancellationToken);
-
-            return;
-        }
-
-        var currentStep = _surveyStates[message.Chat.Id];
-
-        switch (currentStep.CurrentStep)
-        {
-            case CargoStep.Number:
-                await HandleNumberAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.Driver:
-                await HandleDriverAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.Dispatcher:
-                await HandleDispatcherAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.MC:
-                await HandleMcAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.MileWithCargo:
-                await HandleWithMileAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.WithoutCargo:
-                await HandleMileInputAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.CostCargo:
-                await HandleCostCargoAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.PathTravel:
-                await HandlePathTravelAsync(botClient, message, currentStep, cancellationToken);
-                break;
-            case CargoStep.ChangeStep:
-                await HandleChangeStepAsync(botClient, message, currentStep, cancellationToken);
-                break;
         }
     }
 
-    private async Task HandleDriverAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrEmpty(message.Text))
+        var chatId = callbackQuery.Message.Chat.Id;
+        if (!_surveyStates.TryGetValue(chatId, out var state)) return;
+
+        if (callbackQuery.Data.StartsWith("dispatcher_"))
         {
-            // state.CurrentStep = CargoStep.MC;
-            var lines = await _driverService.GetAllAsync();
-
-            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
-            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
+            var dispatcherName = callbackQuery.Data.Replace("dispatcher_", "");
+            var dispatcher = await _dispatcherService.GetByNameAsync(dispatcherName);
             
-            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
-
-            for (int i = 0; i < firstLine.Length; i++)
+            if (dispatcher != null)
             {
-                var secondButton = i < secondLine.Length 
-                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"driver-{secondLine[i]}") 
-                    : null;
-    
-                inlineKeyboard[i] = new[]
-                {
-                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"druver-{firstLine[i]}"),
-                    secondButton
-                }.Where(b => b != null).ToArray();
-            }
-
-            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
-            
-            await botClient.SendMessage(
-                chatId: message.Chat.Id,
-                text: "Введите водителя:",
-                replyMarkup: replyMarkup,
-                cancellationToken: cancellationToken);
-        }
-    }
-
-    private async Task HandleWhatChangeAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrEmpty(message.Text))
-        {
-            if (message.Text == "MC#")
-            {
-                // state.CurrentStep = CargoStep.MC;
-                //
-                // await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
-                await HandleMcAsync(botClient, message, state, cancellationToken, true);
-            }
-            if (message.Text == "")
-            {
-                
+                state.DispatcherId = dispatcher.Id.ToString();
+                state.CurrentStep = CargoStep.Driver;
+                await ShowDriversKeyboard(botClient, chatId, cancellationToken);
             }
         }
-    }
-
-    private async Task HandleChangeStepAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrEmpty(message.Text))
+        else if (callbackQuery.Data.StartsWith("driver_"))
         {
-            if (message.Text.ToLower() == "нет")
+            var driverName = callbackQuery.Data.Replace("driver_", "");
+            var driver = await _driverService.GetByNameAsync(driverName);
+            
+            if (driver != null)
             {
-                Cargo cargo = new()
-                {
-                    Id = Guid.NewGuid(),
-                    Number = _surveyStates[message.Chat.Id].Number,
-                    CostCargo = _surveyStates[message.Chat.Id].CostCargo,
-                    PathTravel = _surveyStates[message.Chat.Id].PathTravel,
-                    DispatcherId = _surveyStates[message.Chat.Id].Dispatcher,
-                    MC = _surveyStates[message.Chat.Id].Mc,
-                    WithMile = _surveyStates[message.Chat.Id].MileWithCargo,
-                    WithoutMile = _surveyStates[message.Chat.Id].MileWithoutCargo,
-                };
-
-                await _cargoService.AddAsync(cargo);
-                _surveyStates.Remove(message.Chat.Id);
-                
-                await botClient.SendMessage(message.Chat.Id, "Груз добавлен", cancellationToken: cancellationToken);
-            }
-
-            if (message.Text.ToLower() == "да")
-            {
-                //todo разобраться с водилой и MC#
-                
-                var keyboard = new InlineKeyboardMarkup(new[]
-                {
-                    InlineKeyboardButton.WithCallbackData("Номер груза", $"change-number"),
-                    InlineKeyboardButton.WithCallbackData("Диспетчера", $"change-dispatcher"),
-                    // InlineKeyboardButton.WithCallbackData("Водителя", $"change-"),
-                    InlineKeyboardButton.WithCallbackData("MC# компании", $"change-mc"),
-                    InlineKeyboardButton.WithCallbackData("Сколько миль пустым", $"change-without mile"),
-                    InlineKeyboardButton.WithCallbackData("Сколько миль с грузом", $"change-mile withcargo"),
-                    InlineKeyboardButton.WithCallbackData("Маршрут", $"change-path"),
-                });
-
-                await botClient.SendMessage(message.Chat.Id, "Что хотите изменить?", replyMarkup: keyboard,
-                    cancellationToken: cancellationToken);
+                state.DriverId = driver.Id.ToString();
+                state.CurrentStep = CargoStep.MC;
+                await ShowMcCompaniesKeyboard(botClient, chatId, cancellationToken);
             }
         }
-    }
-
-    private async Task HandleNumberAsync(ITelegramBotClient botClient, Message message, SurveyState surveyState, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
+        else if (callbackQuery.Data.StartsWith("mc_"))
         {
-            surveyState.Number = message.Text;
-            // surveyState.CurrentStep = CargoStep.Dispatcher;
-
-            var lines = await _dispatcherService.GetAllAsync();
-
-            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
-            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
+            var mcName = callbackQuery.Data.Replace("mc_", "");
+            var mc = await _mcService.GetByNameAsync(mcName);
             
-            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
-
-            for (int i = 0; i < firstLine.Length; i++)
+            if (mc != null)
             {
-                var secondButton = i < secondLine.Length 
-                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"dispatcher-{secondLine[i]}") 
-                    : null;
-    
-                inlineKeyboard[i] = new[]
-                {
-                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"dispatcher-{firstLine[i]}"),
-                    secondButton
-                }.Where(b => b != null).ToArray();
-            }
-
-            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
-            
-            await botClient.SendMessage(
-                chatId: message.Chat.Id,
-                text: "Введите диспетчера:",
-                replyMarkup: replyMarkup,
-                cancellationToken: cancellationToken);
-        }
-    }
-
-    private async Task HandleDispatcherAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
-        {
-            var dispatcher = await _dispatcherService.GetByNameAsync(message.Text);
-            
-            // surveyState.Dispatcher = dispatcher.Id.ToString();
-            // surveyState.CurrentStep = CargoStep.MC;
-         
-            var lines = await _mcService.GetAllAsync();
-
-            var firstLine = lines.Select(x => x.Name).Take(lines.Count() / 2).ToArray();
-            var secondLine = lines.Select(x => x.Name).Skip(lines.Count() / 2).ToArray();
-            
-            var inlineKeyboard = new InlineKeyboardButton[firstLine.Length][];
-
-            for (int i = 0; i < firstLine.Length; i++)
-            {
-                var secondButton = i < secondLine.Length 
-                    ? InlineKeyboardButton.WithCallbackData(secondLine[i], $"mc-{secondLine[i]}") 
-                    : null;
-    
-                inlineKeyboard[i] = new[]
-                {
-                    InlineKeyboardButton.WithCallbackData(firstLine[i], $"mc-{firstLine[i]}"),
-                    secondButton
-                }.Where(b => b != null).ToArray();
-            }
-
-            var replyMarkup = new InlineKeyboardMarkup(inlineKeyboard);
-            
-            await botClient.SendMessage(
-                chatId: message.Chat.Id,
-                replyMarkup: replyMarkup,
-                text: "Введите MC# компании:",
-                cancellationToken: cancellationToken);
-        }
-    }
-    
-    private async Task HandleMcAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken, bool changStep = false)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
-        {
-            surveyState.Mc = message.Text;
-
-            if (changStep)
-            {
-                surveyState.CurrentStep = CargoStep.None;
-            }
-            else
-            {
-                surveyState.CurrentStep = CargoStep.WithoutCargo;
-            
-                await botClient.SendMessage(
-                    chatId: message.Chat.Id,
+                state.McId = mc.Id.ToString();
+                state.CurrentStep = CargoStep.MileWithoutCargo;
+                await botClient.SendTextMessageAsync(
+                    chatId: chatId,
                     text: "Введите сколько миль пустым:",
                     cancellationToken: cancellationToken);
             }
         }
-    }
-    
-    private async Task HandleMileInputAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
+        else if (callbackQuery.Data == "confirm_yes")
         {
-            if (double.TryParse(message.Text, out double mile))
-            {
-                surveyState.MileWithoutCargo = mile;
-                surveyState.CurrentStep = CargoStep.MileWithCargo;
-            
-                await botClient.SendMessage(
-                    chatId: message.Chat.Id,
-                    text: "Введите сколько миль с грузом:",
-                    cancellationToken: cancellationToken);
-            }
-            else
-            {
-                await botClient.SendMessage(message.Chat.Id, "Введите корректные данные!",
-                    cancellationToken: cancellationToken);
-            }
+            await SaveCargoAndFinish(botClient, chatId, state, cancellationToken);
         }
-    }
-    
-    private async Task HandleWithMileAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
+        else if (callbackQuery.Data == "confirm_no")
         {
-            if (double.TryParse(message.Text, out double mile))
-            {
-                surveyState.MileWithCargo = mile;
-                surveyState.CurrentStep = CargoStep.CostCargo;
-            
-                await botClient.SendMessage(
-                    chatId: message.Chat.Id,
-                    text: "Введите сколько платят за груз:",
-                    cancellationToken: cancellationToken);
-            }
+            state.CurrentStep = CargoStep.ChangeField;
+            await AskWhatToChange(botClient, chatId, cancellationToken);
         }
+
+        await botClient.AnswerCallbackQueryAsync(callbackQuery.Id, cancellationToken: cancellationToken);
     }
-    
-    private async Task HandleCostCargoAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
+
+    private async Task HandleNumberInputAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
     {
-        if (double.TryParse(message.Text, out double costCargo))
+        state.Number = message.Text;
+        state.CurrentStep = CargoStep.Dispatcher;
+        await ShowDispatchersKeyboard(botClient, message.Chat.Id, cancellationToken);
+    }
+
+    private async Task ShowDispatchersKeyboard(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        var dispatchers = await _dispatcherService.GetAllAsync();
+        var buttons = dispatchers
+            .Select(d => InlineKeyboardButton.WithCallbackData(d.Name, $"dispatcher_{d.Name}"))
+            .ToArray();
+
+        var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
+        
+        await botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Выберите диспетчера:",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task ShowDriversKeyboard(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        var drivers = await _driverService.GetAllAsync();
+        var buttons = drivers
+            .Select(d => InlineKeyboardButton.WithCallbackData(d.Name, $"driver_{d.Name}"))
+            .ToArray();
+
+        var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
+        
+        await botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Выберите водителя:",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task ShowMcCompaniesKeyboard(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        var mcs = await _mcService.GetAllAsync();
+        var buttons = mcs
+            .Select(m => InlineKeyboardButton.WithCallbackData(m.Name, $"mc_{m.Name}"))
+            .ToArray();
+
+        var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
+        
+        await botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Выберите MC компанию:",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task HandleMileWithoutCargoInputAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    {
+        if (double.TryParse(message.Text, out var miles))
         {
-            if (!string.IsNullOrWhiteSpace(message.Text))
-            {
-                surveyState.CostCargo = costCargo;
-                surveyState.CurrentStep = CargoStep.PathTravel;
-            
-                await botClient.SendTextMessageAsync(
-                    chatId: message.Chat.Id,
-                    text: "Маршрут: из какого штата/города \u2192 в какой штат/город:",
-                    cancellationToken: cancellationToken);
-            }
+            state.MileWithoutCargo = miles;
+            state.CurrentStep = CargoStep.MileWithCargo;
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Введите сколько миль с грузом:",
+                cancellationToken: cancellationToken);
         }
         else
         {
-            await botClient.SendMessage(message.Chat.Id, "Введите корректные данные!",
-                cancellationToken: cancellationToken);
-        }
-    }
-    
-    private async Task HandlePathTravelAsync(ITelegramBotClient botClient, Message message,
-        SurveyState surveyState, CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(message.Text))
-        {
-            surveyState.PathTravel = message.Text;
-            surveyState.CurrentStep = CargoStep.ChangeStep;
-
-            await botClient.SendMessage(message.Chat.Id, $"Хотите ли изменить груз?",
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Пожалуйста, введите корректное число:",
                 cancellationToken: cancellationToken);
         }
     }
 
-    private async Task HandleNameDriver(ITelegramBotClient botClient, Message message, DriverState state,
-        CancellationToken cancellationToken)
+    private async Task HandleMileWithCargoInputAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrEmpty(message.Text))
+        if (double.TryParse(message.Text, out var miles))
         {
-            state.Step = DriverStep.McNumber;
-            state.Name = message.Text;
-
-            await botClient.SendMessage(message.Chat.Id, "Введите MC#", cancellationToken: cancellationToken);
+            state.MileWithCargo = miles;
+            state.CurrentStep = CargoStep.CostCargo;
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Введите сколько платят за груз:",
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Пожалуйста, введите корректное число:",
+                cancellationToken: cancellationToken);
         }
     }
 
-    private async Task HandleMCNumber(ITelegramBotClient botClient, Message message, DriverState state,
-        CancellationToken cancellationToken)
+    private async Task HandleCostCargoInputAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrEmpty(message.Text))
+        if (double.TryParse(message.Text, out var cost))
         {
-            state.Step = DriverStep.None;
-            state.McNumber = message.Text;
-
-            Driver driver = new()
-            {
-                Id = Guid.NewGuid(),
-                Name = state.Name,
-                MCNumber = state.McNumber
-            };
-            
-            await _driverService.AddAsync(driver);
-            
-            await botClient.SendMessage(message.Chat.Id, "Водитель добавлен", cancellationToken: cancellationToken);
+            state.CostCargo = cost;
+            state.CurrentStep = CargoStep.PathTravel;
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Введите маршрут:",
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: "Пожалуйста, введите корректную сумму:",
+                cancellationToken: cancellationToken);
         }
     }
 
+    private async Task HandlePathTravelInputAsync(ITelegramBotClient botClient, Message message, SurveyState state, CancellationToken cancellationToken)
+    {
+        state.PathTravel = message.Text;
+        state.CurrentStep = CargoStep.Confirmation;
+        
+        var summary = $"Проверьте данные:\n\n" +
+                     $"Номер: {state.Number}\n" +
+                     $"Диспетчер: {state.DispatcherId}\n" +
+                     $"Водитель: {state.DriverId}\n" +
+                     $"MC: {state.McId}\n" +
+                     $"Миль без груза: {state.MileWithoutCargo}\n" +
+                     $"Миль с грузом: {state.MileWithCargo}\n" +
+                     $"Оплата: {state.CostCargo}\n" +
+                     $"Маршрут: {state.PathTravel}\n\n" +
+                     $"Все верно?";
+        
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            InlineKeyboardButton.WithCallbackData("Да", "confirm_yes"),
+            InlineKeyboardButton.WithCallbackData("Нет", "confirm_no"),
+        });
+        
+        await botClient.SendTextMessageAsync(
+            chatId: message.Chat.Id,
+            text: summary,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task AskWhatToChange(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("Номер", "change_number") },
+            new[] { InlineKeyboardButton.WithCallbackData("Диспетчера", "change_dispatcher") },
+            new[] { InlineKeyboardButton.WithCallbackData("Водителя", "change_driver") },
+            new[] { InlineKeyboardButton.WithCallbackData("MC компанию", "change_mc") },
+            new[] { InlineKeyboardButton.WithCallbackData("Миль без груза", "change_mile_empty") },
+            new[] { InlineKeyboardButton.WithCallbackData("Миль с грузом", "change_mile_loaded") },
+            new[] { InlineKeyboardButton.WithCallbackData("Оплату", "change_cost") },
+            new[] { InlineKeyboardButton.WithCallbackData("Маршрут", "change_route") },
+        });
+        
+        await botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Что вы хотите изменить?",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task SaveCargoAndFinish(ITelegramBotClient botClient, long chatId, SurveyState state, CancellationToken cancellationToken)
+    {
+        var cargo = new Cargo
+        {
+            Id = Guid.NewGuid(),
+            Number = state.Number,
+            DispatcherId = state.DispatcherId,
+            MC = state.McId,
+            WithoutMile = state.MileWithoutCargo,
+            WithMile = state.MileWithCargo,
+            CostCargo = state.CostCargo,
+            PathTravel = state.PathTravel,
+        };
+        
+        await _cargoService.AddAsync(cargo);
+        _surveyStates.Remove(chatId);
+        
+        await botClient.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Груз успешно сохранен!",
+            cancellationToken: cancellationToken);
+    }
+
+    private void StartNewSurvey(long chatId)
+    {
+        _surveyStates[chatId] = new SurveyState
+        {
+            CurrentStep = CargoStep.Number
+        };
+    }
+
+    // ... (остальные методы остаются без изменений)
     private Task HandlePollingErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
     {
         Console.WriteLine($"Polling error: {exception.Message}");
@@ -542,4 +386,32 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         _cts?.Dispose();
     }
+}
+
+public class SurveyState
+{
+    public CargoStep CurrentStep { get; set; }
+    public string Number { get; set; }
+    public string DispatcherId { get; set; }
+    public string DriverId { get; set; }
+    public string McId { get; set; }
+    public double MileWithoutCargo { get; set; }
+    public double MileWithCargo { get; set; }
+    public double CostCargo { get; set; }
+    public string PathTravel { get; set; }
+}
+
+public enum CargoStep
+{
+    None,
+    Number,
+    Dispatcher,
+    Driver,
+    MC,
+    MileWithoutCargo,
+    MileWithCargo,
+    CostCargo,
+    PathTravel,
+    Confirmation,
+    ChangeField
 }
