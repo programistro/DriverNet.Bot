@@ -3,5 +3,12 @@
 public enum AdminStep
 {
     None,
-    Dispatcher
+    AddDispatcherName,
+    AddDispatcherPercent,
+    AddDispatcherConfirm,
+    AddMcName,
+    AddMcConfirm,
+    AddDriverName,
+    AddDriverMc,
+    AddDriverConfirm
 }

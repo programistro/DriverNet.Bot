@@ -16,21 +16,26 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private readonly IDriverService _driverService;
     private readonly IDispatcherService _dispatcherService;
     private readonly ICargoService _cargoService;
+    private readonly ICycleService _cycleService;
     protected readonly IMcService _mcService;
     private CancellationTokenSource _cts;
     private static Dictionary<long, SurveyState> _surveyStates = new();
     private static DriverState _driverState = new();
     private static AdminStep _adminStep = new();
-
+    private string _tempName = string.Empty;
+    private double _percent = 0;
+    private string _mcName = string.Empty;
+    
     public TelegramBotService(
         string botToken,
         IDriverService driverService,
-        IDispatcherService dispatcherService, ICargoService cargoService, IMcService mcService)
+        IDispatcherService dispatcherService, ICargoService cargoService, IMcService mcService, ICycleService cycleService)
     {
         _botClient = new TelegramBotClient(botToken);
         _driverService = driverService;
         _dispatcherService = dispatcherService;
         _cargoService = cargoService;
+        _cycleService = cycleService;
         _mcService = mcService;
     }
 
@@ -83,10 +88,180 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         var message = update.Message;
         if (message == null) return;
 
+        if (message.Chat.Id == -4713702986)
+        {
+            if (message.Text == "/add-driver")
+            {
+                _adminStep = AdminStep.AddDriverName;
+                await botClient.SendMessage(message.Chat.Id, "Введите имя нового водителя:",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+            
+            if (message.Text == "/add-dispatcher")
+            {
+                _adminStep = AdminStep.AddDispatcherName;
+                await botClient.SendTextMessageAsync(
+                    chatId: message.Chat.Id,
+                    text: "Введите имя нового диспетчера:",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+            else if (message.Text == "/add-mc")
+            {
+                _adminStep = AdminStep.AddMcName;
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "Введите название новой MC компании:",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+            
+            switch (_adminStep)
+            {
+                case AdminStep.AddDispatcherName:
+                    _adminStep = AdminStep.AddDispatcherPercent;
+                    _tempName = message.Text;
+                
+                    await botClient.SendTextMessageAsync(
+                        chatId: message.Chat.Id,
+                        text: "Введите процент диспетчера (например, 1.5 для 1.5%):",
+                        cancellationToken: cancellationToken);
+                    break;
+                case AdminStep.AddDispatcherPercent:
+                    if (double.TryParse(message.Text, out double percent))
+                    {
+                        _percent = percent;
+                        _adminStep = AdminStep.AddDispatcherConfirm;
+                    
+                        var distConfirmKeyboard = new InlineKeyboardMarkup(new[]
+                        {
+                            InlineKeyboardButton.WithCallbackData("Да", "confirm_add_dispatcher"),
+                            InlineKeyboardButton.WithCallbackData("Нет", "cancel_add_dispatcher")
+                        });
+                    
+                        await botClient.SendTextMessageAsync(
+                            chatId: message.Chat.Id,
+                            text: $"Добавить диспетчера?\nИмя: {_tempName}\nПроцент: {_percent}%",
+                            replyMarkup: distConfirmKeyboard,
+                            cancellationToken: cancellationToken);
+                    }
+                    else
+                    {
+                        await botClient.SendTextMessageAsync(
+                            chatId: message.Chat.Id,
+                            text: "Некорректный формат процента. Введите число (например: 1.5):",
+                            cancellationToken: cancellationToken);
+                    }
+                    break;
+                case AdminStep.AddMcName:
+                    _adminStep = AdminStep.AddMcConfirm;
+                    _tempName = message.Text;
+                
+                    var mcConfirmKeyboard = new InlineKeyboardMarkup(new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("Да", "confirm_add_mc"),
+                        InlineKeyboardButton.WithCallbackData("Нет", "cancel_add_mc")
+                    });
+                
+                    await botClient.SendTextMessageAsync(
+                        chatId: message.Chat.Id,
+                        text: $"Добавить MC компанию: {message.Text}?",
+                        replyMarkup: mcConfirmKeyboard,
+                        cancellationToken: cancellationToken);
+                    break;
+                case AdminStep.AddDriverName:
+                    _adminStep = AdminStep.AddDriverMc;
+                    _tempName = message.Text;
+
+                    var mcs = await _mcService.GetAllAsync();
+                    
+                    var buttons = mcs
+                        .Select(d => InlineKeyboardButton.WithCallbackData(d.Name, $"drivermc-{d.Name}"))
+                        .ToArray();
+
+                    var driverMcKeyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
+
+                    await botClient.SendMessage(message.Chat.Id, $"Выберите MC#:",
+                        replyMarkup: driverMcKeyboard, cancellationToken: cancellationToken);
+                    break;
+                case AdminStep.AddDriverMc:
+                    _adminStep = AdminStep.AddMcConfirm;
+                    _mcName = message.Text;
+                    
+                    break;
+            }
+            
+            if (message.Text == "/open-month")
+            {
+                _cycleService.StartMonth();
+
+                await _botClient.SendMessage(message.Chat.Id, "Месяц для статистики открыт", cancellationToken: cancellationToken);
+            }
+            else if (message.Text == "/close-month")
+            {
+                _cycleService.EndMonth();
+
+                await _botClient.SendMessage(message.Chat.Id,
+                    $"Месяц для статистики закрыт, статистика велась с {_cycleService.Month} по {_cycleService.LastMonth}",
+                    cancellationToken: cancellationToken);
+            }
+            else if (message.Text == "/stat-month")
+            {
+                var allCargos = await _cargoService.GetAllAsync();
+                var periodCargos = allCargos
+                    .Where(c => c.CreatedAt >= _cycleService.Month &&
+                                c.CreatedAt <= _cycleService.LastMonth);
+
+                if (!periodCargos.Any())
+                {
+                    await botClient.SendTextMessageAsync(
+                        chatId: message.Chat.Id,
+                        text:
+                        $"Нет данных за период с {_cycleService.Month} по {(_cycleService.LastMonth)}",
+                        cancellationToken: cancellationToken);
+                    return;
+                }
+
+                // Рассчитываем статистику
+                double totalCost = periodCargos.Sum(c => c.CostCargo);
+                double totalEmptyMiles = periodCargos.Sum(c => c.WithoutMile);
+                double totalLoadedMiles = periodCargos.Sum(c => c.WithMile);
+                double totalMiles = totalEmptyMiles + totalLoadedMiles;
+                double ratePerMile = totalMiles > 0 ? totalCost / totalMiles : 0;
+
+                // Формируем отчет
+                var report = new System.Text.StringBuilder();
+                report.AppendLine(
+                    $"📊 Статистика за период {_cycleService.Month} - {_cycleService.LastMonth}");
+                report.AppendLine();
+                report.AppendLine($"📌 Всего грузов: {periodCargos.Count()}");
+                report.AppendLine($"💰 Общая сумма: ${totalCost:F2}");
+                report.AppendLine($"🛣️ Общий пробег: {totalMiles} миль");
+                report.AppendLine($"  ├ Пустых: {totalEmptyMiles} миль");
+                report.AppendLine($"  └ Загруженных: {totalLoadedMiles} миль");
+                report.AppendLine();
+                report.AppendLine($"📈 Rate per mile: ${ratePerMile:F2}");
+                report.AppendLine();
+                report.AppendLine("Список грузов:");
+
+                foreach (var cargo in periodCargos.OrderBy(c => c.CreatedAt))
+                {
+                    report.AppendLine(
+                        $"  - #{cargo.Number} | {cargo.CreatedAt:dd.MM.yyyy} | ${cargo.CostCargo:F2} | {cargo.WithMile + cargo.WithoutMile} миль");
+                }
+
+                await botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: report.ToString(),
+                    cancellationToken: cancellationToken);
+            }
+        }
+        
         if (message.Text == "/load")
         {
             StartNewSurvey(message.Chat.Id);
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Введите номер загрузки:",
                 cancellationToken: cancellationToken);
@@ -122,11 +297,101 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
     private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
-        var chatId = callbackQuery.Message.Chat.Id;
-        if (!_surveyStates.TryGetValue(chatId, out var state)) return;
-
         try
         {
+            if (callbackQuery.Message.Chat.Id == -4713702986)
+            {
+                if (callbackQuery.Data.StartsWith("drivermc-"))
+                {
+                    _mcName = callbackQuery.Data.Replace("drivermc-", "");
+                    _adminStep = AdminStep.AddDriverConfirm;
+                    
+                    var driverConfirmKeyboard = new InlineKeyboardMarkup(new[]
+                    {
+                        InlineKeyboardButton.WithCallbackData("Да", "confirm_add_driver"),
+                        InlineKeyboardButton.WithCallbackData("Нет", "cancel_add_driver")
+                    });
+
+                    await botClient.SendMessage(callbackQuery.Message.Chat.Id, $"Добавить водителя {_tempName} с MC# {_mcName}?",
+                        replyMarkup: driverConfirmKeyboard, cancellationToken: cancellationToken);
+                    return;
+                }
+                
+                switch (callbackQuery.Data)
+                {
+                    case "confirm_add_dispatcher":
+                        var newDispatcher = new Dispatcher
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = _tempName,
+                            Percent = _percent
+                        };
+                        await _dispatcherService.AddAsync(newDispatcher);
+
+                        await botClient.SendTextMessageAsync(
+                            chatId: callbackQuery.Message.Chat.Id,
+                            text: $"Диспетчер {_tempName} успешно добавлен!",
+                            cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+
+                    case "cancel_add_dispatcher":
+                        await botClient.SendTextMessageAsync(
+                            chatId: callbackQuery.Message.Chat.Id,
+                            text: "Добавление диспетчера отменено",
+                            cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+
+                    case "confirm_add_mc":
+                        var newMc = new McModel()
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = _tempName 
+                        };
+                        await _mcService.AddAsync(newMc);
+
+                        await botClient.SendTextMessageAsync(
+                            chatId: callbackQuery.Message.Chat.Id,
+                            text: $"MC компания {_tempName} успешно добавлена!",
+                            cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+
+                    case "cancel_add_mc":
+                        await botClient.SendTextMessageAsync(
+                            chatId: callbackQuery.Message.Chat.Id,
+                            text: "Добавление MC компании отменено",
+                            cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+                    
+                    case "confirm_add_driver":
+                        Driver driver = new()
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = _tempName,
+                            MCNumber = _mcName
+                        };
+                        await _driverService.AddAsync(driver);
+
+                        await botClient.SendMessage(callbackQuery.Message.Chat.Id,
+                            $"Вводитеьл {_tempName} успешно добавлен!", cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+                    case "cancel_add_driver":
+                        await botClient.SendMessage(
+                            chatId: callbackQuery.Message.Chat.Id,
+                            text: "Добавление вводителя отменено",
+                            cancellationToken: cancellationToken);
+                        _adminStep = AdminStep.None;
+                        break;
+                }
+            }
+
+            var chatId = callbackQuery.Message.Chat.Id;
+            if (!_surveyStates.TryGetValue(chatId, out var state)) return;
+            
             if (callbackQuery.Data.StartsWith("dispatcher_"))
             {
                 var dispatcherName = callbackQuery.Data.Replace("dispatcher_", "");
@@ -190,7 +455,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         {
             Console.WriteLine($"Error handling callback: {ex.Message}");
             await botClient.SendTextMessageAsync(
-                chatId: chatId,
+                chatId: callbackQuery.Message.Chat.Id,
                 text: "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
                 cancellationToken: cancellationToken);
         }
@@ -391,15 +656,15 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             else
             {
                 state.CurrentStep = CargoStep.PathTravel;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: message.Chat.Id,
-                    text: "Введите маршрут (например: IL/Chicago→NY/Brooklyn):",
+                    text: "Введите маршрут (например: Москва - Санкт-Петербург):",
                     cancellationToken: cancellationToken);
             }
         }
         else
         {
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Пожалуйста, введите корректную сумму:",
                 cancellationToken: cancellationToken);
@@ -528,33 +793,4 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     {
         _cts?.Dispose();
     }
-}
-
-public class SurveyState
-{
-    public CargoStep CurrentStep { get; set; }
-    public bool IsEditing { get; set; }
-    public string Number { get; set; }
-    public string DispatcherId { get; set; }
-    public string DriverId { get; set; }
-    public string McId { get; set; }
-    public double MileWithoutCargo { get; set; }
-    public double MileWithCargo { get; set; }
-    public double CostCargo { get; set; }
-    public string PathTravel { get; set; }
-}
-
-public enum CargoStep
-{
-    None,
-    Number,
-    Dispatcher,
-    Driver,
-    MC,
-    MileWithoutCargo,
-    MileWithCargo,
-    CostCargo,
-    PathTravel,
-    Confirmation,
-    ChangeField
 }

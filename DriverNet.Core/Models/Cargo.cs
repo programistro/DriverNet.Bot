@@ -19,4 +19,6 @@ public class Cargo
     public double CostCargo { get; set; }
 
     public string PathTravel { get; set; }
+    
+    public DateOnly CreatedAt { get; set; } 
 }

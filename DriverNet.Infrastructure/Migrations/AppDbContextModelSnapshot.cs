@@ -31,6 +31,9 @@ namespace DriverNet.Infrastructure.Migrations
                     b.Property<double>("CostCargo")
                         .HasColumnType("double precision");
 
+                    b.Property<DateOnly>("CreatedAt")
+                        .HasColumnType("date");
+
                     b.Property<string>("DispatcherId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -68,7 +71,10 @@ namespace DriverNet.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("PercentDispatcher")
+                    b.Property<double>("Percent")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("PercentDispatcher")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

@@ -61,13 +61,15 @@ class Program
                 builder.AddSingleton<ICargoService, CargoService>();
                 builder.AddSingleton<IMcRepository, McRepository>();
                 builder.AddSingleton<IMcService, McService>();
+                builder.AddSingleton<ICycleService, CycleService>();
                 builder.AddSingleton<ITelegramBotService>(provider =>
                     new TelegramBotService(
                         botToken,
                         provider.GetRequiredService<IDriverService>(),
                         provider.GetRequiredService<IDispatcherService>(),
                         provider.GetRequiredService<ICargoService>(),
-                        provider.GetRequiredService<IMcService>()));
+                        provider.GetRequiredService<IMcService>(),
+                        provider.GetRequiredService<ICycleService>()));
             
                 builder.AddHostedService<BotBackgroundService>();
             }));

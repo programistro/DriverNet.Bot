@@ -9,5 +9,7 @@ public class Dispatcher
     
     public string Name { get; set; }
     
-    public PercentDispatcher PercentDispatcher { get; set; }
+    public PercentDispatcher? PercentDispatcher { get; set; }
+    
+    public double Percent { get; set; }
 }

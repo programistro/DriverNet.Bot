@@ -22,7 +22,8 @@ namespace DriverNet.Infrastructure.Migrations
                     WithoutMile = table.Column<double>(type: "double precision", nullable: false),
                     WithMile = table.Column<double>(type: "double precision", nullable: false),
                     CostCargo = table.Column<double>(type: "double precision", nullable: false),
-                    PathTravel = table.Column<string>(type: "text", nullable: false)
+                    PathTravel = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateOnly>(type: "date", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -35,7 +36,8 @@ namespace DriverNet.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
-                    PercentDispatcher = table.Column<int>(type: "integer", nullable: false)
+                    PercentDispatcher = table.Column<int>(type: "integer", nullable: true),
+                    Percent = table.Column<double>(type: "double precision", nullable: false)
                 },
                 constraints: table =>
                 {
