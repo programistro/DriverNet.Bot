@@ -101,7 +101,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             if (message.Text == "/add-dispatcher")
             {
                 _adminStep = AdminStep.AddDispatcherName;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: message.Chat.Id,
                     text: "Введите имя нового диспетчера:",
                     cancellationToken: cancellationToken);
@@ -123,7 +123,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                     _adminStep = AdminStep.AddDispatcherPercent;
                     _tempName = message.Text;
                 
-                    await botClient.SendTextMessageAsync(
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
                         text: "Введите процент диспетчера (например, 1.5 для 1.5%):",
                         cancellationToken: cancellationToken);
@@ -140,7 +140,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                             InlineKeyboardButton.WithCallbackData("Нет", "cancel_add_dispatcher")
                         });
                     
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: message.Chat.Id,
                             text: $"Добавить диспетчера?\nИмя: {_tempName}\nПроцент: {_percent}%",
                             replyMarkup: distConfirmKeyboard,
@@ -148,7 +148,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                     }
                     else
                     {
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: message.Chat.Id,
                             text: "Некорректный формат процента. Введите число (например: 1.5):",
                             cancellationToken: cancellationToken);
@@ -164,7 +164,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         InlineKeyboardButton.WithCallbackData("Нет", "cancel_add_mc")
                     });
                 
-                    await botClient.SendTextMessageAsync(
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
                         text: $"Добавить MC компанию: {message.Text}?",
                         replyMarkup: mcConfirmKeyboard,
@@ -215,7 +215,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
                 if (!periodCargos.Any())
                 {
-                    await botClient.SendTextMessageAsync(
+                    await botClient.SendMessage(
                         chatId: message.Chat.Id,
                         text:
                         $"Нет данных за период с {_cycleService.Month} по {(_cycleService.LastMonth)}",
@@ -328,7 +328,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         };
                         await _dispatcherService.AddAsync(newDispatcher);
 
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: callbackQuery.Message.Chat.Id,
                             text: $"Диспетчер {_tempName} успешно добавлен!",
                             cancellationToken: cancellationToken);
@@ -336,7 +336,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         break;
 
                     case "cancel_add_dispatcher":
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: callbackQuery.Message.Chat.Id,
                             text: "Добавление диспетчера отменено",
                             cancellationToken: cancellationToken);
@@ -351,7 +351,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         };
                         await _mcService.AddAsync(newMc);
 
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: callbackQuery.Message.Chat.Id,
                             text: $"MC компания {_tempName} успешно добавлена!",
                             cancellationToken: cancellationToken);
@@ -359,7 +359,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                         break;
 
                     case "cancel_add_mc":
-                        await botClient.SendTextMessageAsync(
+                        await botClient.SendMessage(
                             chatId: callbackQuery.Message.Chat.Id,
                             text: "Добавление MC компании отменено",
                             cancellationToken: cancellationToken);
@@ -425,7 +425,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 {
                     state.McId = mc.Id.ToString();
                     state.CurrentStep = CargoStep.MileWithoutCargo;
-                    await botClient.SendTextMessageAsync(
+                    await botClient.SendMessage(
                         chatId: chatId,
                         text: "Введите сколько миль пустым:",
                         cancellationToken: cancellationToken);
@@ -454,7 +454,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Error handling callback: {ex.Message}");
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: callbackQuery.Message.Chat.Id,
                 text: "Произошла ошибка. Пожалуйста, попробуйте еще раз.",
                 cancellationToken: cancellationToken);
@@ -469,7 +469,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         {
             case "number":
                 state.CurrentStep = CargoStep.Number;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: "Введите новый номер загрузки:",
                     cancellationToken: cancellationToken);
@@ -492,7 +492,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 
             case "mile_empty":
                 state.CurrentStep = CargoStep.MileWithoutCargo;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: "Введите новое количество миль без груза:",
                     cancellationToken: cancellationToken);
@@ -500,7 +500,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 
             case "mile_loaded":
                 state.CurrentStep = CargoStep.MileWithCargo;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: "Введите новое количество миль с грузом:",
                     cancellationToken: cancellationToken);
@@ -508,7 +508,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 
             case "cost":
                 state.CurrentStep = CargoStep.CostCargo;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: "Введите новую стоимость груза:",
                     cancellationToken: cancellationToken);
@@ -516,7 +516,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
                 
             case "route":
                 state.CurrentStep = CargoStep.PathTravel;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: chatId,
                     text: "Введите новый маршрут:",
                     cancellationToken: cancellationToken);
@@ -548,7 +548,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
         var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Выберите диспетчера:",
             replyMarkup: keyboard,
@@ -564,7 +564,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
         var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Выберите водителя:",
             replyMarkup: keyboard,
@@ -580,7 +580,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
 
         var keyboard = new InlineKeyboardMarkup(buttons.Chunk(2));
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Выберите MC компанию:",
             replyMarkup: keyboard,
@@ -600,7 +600,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             else
             {
                 state.CurrentStep = CargoStep.MileWithCargo;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: message.Chat.Id,
                     text: "Введите сколько миль с грузом:",
                     cancellationToken: cancellationToken);
@@ -608,7 +608,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         }
         else
         {
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Пожалуйста, введите корректное число:",
                 cancellationToken: cancellationToken);
@@ -628,7 +628,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             else
             {
                 state.CurrentStep = CargoStep.CostCargo;
-                await botClient.SendTextMessageAsync(
+                await botClient.SendMessage(
                     chatId: message.Chat.Id,
                     text: "Введите сколько платят за груз:",
                     cancellationToken: cancellationToken);
@@ -636,7 +636,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         }
         else
         {
-            await botClient.SendTextMessageAsync(
+            await botClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Пожалуйста, введите корректное число:",
                 cancellationToken: cancellationToken);
@@ -701,7 +701,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             new[] { InlineKeyboardButton.WithCallbackData("Отменить изменения", "cancel_changes") },
         });
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Что вы хотите изменить?",
             replyMarkup: keyboard,
@@ -734,7 +734,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
             InlineKeyboardButton.WithCallbackData("Нет", "confirm_no"),
         });
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: summary,
             replyMarkup: keyboard,
@@ -744,7 +744,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
     private async Task ShowConfirmationAfterChange(ITelegramBotClient botClient, long chatId, SurveyState state, CancellationToken cancellationToken)
     {
         state.IsEditing = true;
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Изменения сохранены!",
             cancellationToken: cancellationToken);
@@ -769,7 +769,7 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         await _cargoService.AddAsync(cargo);
         _surveyStates.Remove(chatId);
         
-        await botClient.SendTextMessageAsync(
+        await botClient.SendMessage(
             chatId: chatId,
             text: "Груз успешно сохранен!",
             cancellationToken: cancellationToken);
