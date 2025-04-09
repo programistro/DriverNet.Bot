@@ -714,13 +714,14 @@ public class TelegramBotService : ITelegramBotService, IDisposable
         state.IsEditing = false;
         
         var findDriver = await _driverService.GetByIdAsync(Guid.Parse(state.DriverId));
-        var findDispatcher = await _dispatcherService.GetByIdAsync(Guid.Parse(state.DriverId));
+        var findDispatcher = await _dispatcherService.GetByIdAsync(Guid.Parse(state.DispatcherId));
+        var findMc = await _mcService.GetByIdAsync(Guid.Parse(state.McId));
         
         var summary = $"Проверьте данные:\n\n" +
                      $"Номер: {state.Number}\n" +
                      $"Диспетчер: {findDriver.Name}\n" +
                      $"Водитель: {findDispatcher.Name}\n" +
-                     $"MC: {state.McId}\n" +
+                     $"MC: {findMc.Name}\n" +
                      $"Миль без груза: {state.MileWithoutCargo}\n" +
                      $"Миль с грузом: {state.MileWithCargo}\n" +
                      $"Оплата: {state.CostCargo}\n" +
